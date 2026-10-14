@@ -232,4 +232,14 @@ describe("loadConfig", () => {
     const config = await loadConfig(PROJECT_DIR)
     expect(config).toEqual({})
   })
+
+  test("strict loading refuses malformed files instead of falling back", async () => {
+    await fs.writeFile(path.join(sandboxConfigDir, "config.json"), "broken{json")
+    await expect(loadConfig(PROJECT_DIR, true)).rejects.toThrow()
+  })
+
+  test("strict loading refuses invalid field types", async () => {
+    process.env.OPENCODE_SANDBOX_CONFIG = '{"disabled":"false"}'
+    await expect(loadConfig(PROJECT_DIR, true)).rejects.toThrow("boolean")
+  })
 })

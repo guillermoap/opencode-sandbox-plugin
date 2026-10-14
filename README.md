@@ -16,6 +16,76 @@ Every `bash` tool invocation is wrapped with OS-level filesystem and network res
 
 ## Install
 
+### OpenCode V2 (this fork)
+
+This fork adds the V2 plugin entrypoint and keeps the original V1 server entrypoint.
+It targets OpenCode **2.0.29**. Build a local checkout and load its package directory:
+
+```bash
+git clone https://github.com/guillermoap/opencode-sandbox-plugin.git
+cd opencode-sandbox-plugin
+bun install --frozen-lockfile
+bun run build
+```
+
+```jsonc
+// ~/.config/opencode/opencode.jsonc (merge with existing settings)
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["/absolute/path/to/opencode-sandbox-plugin"]
+}
+```
+
+Reload OpenCode configuration after installation and check that `opencode-sandbox`
+appears as loaded in `opencode plugin list`.
+
+The V2 implementation uses the **shell `create.before` hook**, not the legacy
+`bash` tool hook. Each invocation runs the installed sandbox runtime CLI in its
+own Node process, with a quoted, per-invocation settings stream. This isolates
+concurrent projects' policies, delegates signals and resource cleanup to the
+runtime, and leaves tool history untouched. Node 20.11+ must be on the server's
+PATH. This adds process startup overhead to each command.
+
+**V2 always fails closed**: malformed configuration, missing Node, unsupported
+platforms, and runtime initialization/wrapping failures block the command. The
+legacy `mode: "permissive"` fallback applies only to V1. Explicit disabling still
+works. The plugin package and OpenCode/sandbox configuration directories are automatically
+denied shell writes to prevent modification of the guard from an allowed project.
+
+For `.env` protection on **macOS**, merge these filesystem rules into
+`~/.config/opencode-sandbox/config.json`:
+
+```json
+{
+  "mode": "enforce",
+  "filesystem": {
+    "denyRead": ["/**/.env", "/**/.env.*"],
+    "denyWrite": ["/**/.env", "/**/.env.*"]
+  }
+}
+```
+
+These native macOS glob rules include nested/external files and `.env.example`.
+Specifying `denyRead` replaces the default credential deny list; retain any
+credential paths you also want protected. Keep OpenCode's direct-file permission
+denials as well: the shell sandbox does **not** sandbox other tools, MCP servers,
+the OpenCode host process, or already inherited secret environment variables.
+The default network allowlist still applies. Applications that need to load a
+denied `.env` will fail; use a separate trusted process for those applications.
+
+Linux uses bubblewrap and has different glob semantics: read globs match existing
+paths at command startup, while write rules require literal paths. The macOS
+example is **not** an equivalent Linux write policy.
+
+Run `bun run test:smoke` on macOS for real OS-level denial checks using only dummy
+secrets, including shell/Python/Node reads, writes, symlinks, renames, hardlinks,
+concurrent commands, and exit-code propagation.
+`bun run test:opencode` exercises the same checks through a real OpenCode V2
+location and shell API, without a model call. It creates and cleans up a temporary
+project and its isolated per-project sandbox policy.
+
+### OpenCode V1 (upstream)
+
 ```json
 // opencode.json
 {

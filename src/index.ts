@@ -1,6 +1,7 @@
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime"
 import type { Plugin } from "@opencode-ai/plugin"
 import { loadConfig, resolveConfig } from "./config"
+import V2SandboxPlugin from "./v2"
 
 export type { SandboxPluginConfig } from "./config"
 
@@ -285,4 +286,5 @@ export const SandboxPlugin: Plugin = async ({ client, directory, worktree, serve
 // package.json's `oc-plugin` field.
 export const server = SandboxPlugin
 
-export default SandboxPlugin
+// V1 calls server(); V2 registers hooks through setup().
+export default { ...V2SandboxPlugin, server: SandboxPlugin }

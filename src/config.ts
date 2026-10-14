@@ -1,7 +1,11 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import type { SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime"
+import {
+  FilesystemConfigSchema,
+  NetworkConfigSchema,
+  type SandboxRuntimeConfig,
+} from "@anthropic-ai/sandbox-runtime"
 
 export interface SandboxPluginConfig {
   disabled?: boolean
@@ -120,21 +124,44 @@ export function getConfigDir(): string {
   return path.join(xdgConfig, "opencode-sandbox")
 }
 
-async function tryLoadJsonFile(filePath: string): Promise<SandboxPluginConfig | null> {
+function parseConfig(content: string, strict: boolean): SandboxPluginConfig {
+  const value = JSON.parse(content)
+  if (strict) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Sandbox configuration must be an object")
+    }
+    if (value.disabled !== undefined && typeof value.disabled !== "boolean") {
+      throw new Error("Sandbox disabled must be a boolean")
+    }
+    if (value.mode !== undefined && !["enforce", "permissive"].includes(value.mode)) {
+      throw new Error("Invalid sandbox mode")
+    }
+    if (value.filesystem !== undefined) FilesystemConfigSchema.partial().parse(value.filesystem)
+    if (value.network !== undefined) NetworkConfigSchema.partial().parse(value.network)
+  }
+  return value as SandboxPluginConfig
+}
+
+async function tryLoadJsonFile(
+  filePath: string,
+  strict: boolean,
+): Promise<SandboxPluginConfig | null> {
   try {
     const content = await fs.readFile(filePath, "utf-8")
-    return JSON.parse(content) as SandboxPluginConfig
-  } catch {
+    return parseConfig(content, strict)
+  } catch (error) {
+    if (strict && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error
     return null
   }
 }
 
-export async function loadConfig(projectDir: string): Promise<SandboxPluginConfig> {
+export async function loadConfig(projectDir: string, strict = false): Promise<SandboxPluginConfig> {
   const envConfig = process.env.OPENCODE_SANDBOX_CONFIG
   if (envConfig) {
     try {
-      return JSON.parse(envConfig) as SandboxPluginConfig
-    } catch {
+      return parseConfig(envConfig, strict)
+    } catch (error) {
+      if (strict) throw error
       console.warn("[opencode-sandbox] Invalid JSON in OPENCODE_SANDBOX_CONFIG, using defaults")
     }
   }
@@ -144,10 +171,11 @@ export async function loadConfig(projectDir: string): Promise<SandboxPluginConfi
   const projectName = path.basename(projectDir)
   const projectConfig = await tryLoadJsonFile(
     path.join(configDir, "projects", `${projectName}.json`),
+    strict,
   )
   if (projectConfig) return projectConfig
 
-  const globalConfig = await tryLoadJsonFile(path.join(configDir, "config.json"))
+  const globalConfig = await tryLoadJsonFile(path.join(configDir, "config.json"), strict)
   if (globalConfig) return globalConfig
 
   return {}

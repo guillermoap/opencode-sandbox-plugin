@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, mock, test } from "bun:test"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 
 // Mock the SandboxManager before importing the plugin
+const runtime = await import("@anthropic-ai/sandbox-runtime")
 const mockInitialize = mock(() => Promise.resolve())
 const mockWrapWithSandbox = mock((cmd: string) => Promise.resolve(`srt-wrapped: ${cmd}`))
 const mockCleanupAfterCommand = mock(() => undefined)
 const mockReset = mock(() => Promise.resolve())
 
 mock.module("@anthropic-ai/sandbox-runtime", () => ({
+  ...runtime,
   SandboxManager: {
     initialize: mockInitialize,
     wrapWithSandbox: mockWrapWithSandbox,

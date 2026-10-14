@@ -1,6 +1,6 @@
 {
   "name": "opencode-sandbox",
-  "version": "0.6.0",
+  "version": "0.6.0-v2.0",
   "description": "OpenCode plugin that sandboxes agent commands using @anthropic-ai/sandbox-runtime (seatbelt on macOS, bubblewrap on Linux)",
   "oc-plugin": [
     "server"
@@ -15,15 +15,18 @@
     }
   },
   "files": [
+    "index.ts",
     "dist",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target node --format esm --external @anthropic-ai/sandbox-runtime --external @opencode-ai/plugin && bun x tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "bun build ./src/index.ts --outdir dist --target node --format esm --packages external && bun x tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun run --watch src/index.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
+    "test:smoke": "bun run build && bun scripts/smoke-v2.ts",
+    "test:opencode": "bun run build && bun scripts/smoke-v2.ts --opencode",
     "lint": "biome lint .",
     "format": "biome format .",
     "format:fix": "biome format --write .",
@@ -44,11 +47,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/isanchez31/opencode-sandbox-plugin.git"
+    "url": "git+https://github.com/guillermoap/opencode-sandbox-plugin.git"
   },
-  "homepage": "https://github.com/isanchez31/opencode-sandbox-plugin#readme",
+  "homepage": "https://github.com/guillermoap/opencode-sandbox-plugin#readme",
   "bugs": {
-    "url": "https://github.com/isanchez31/opencode-sandbox-plugin/issues"
+    "url": "https://github.com/guillermoap/opencode-sandbox-plugin/issues"
   },
   "author": "Ivan Sanchez <ivan31.sanchez@gmail.com>",
   "license": "MIT",
@@ -58,10 +61,16 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "@anthropic-ai/sandbox-runtime": "^0.0.76"
+    "@anthropic-ai/sandbox-runtime": "^0.0.76",
+    "@opencode/plugin": "2.0.29"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

@@ -21,7 +21,7 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/bun.lock"]
+    "includes": ["**", "!**/dist", "!**/release", "!**/node_modules", "!**/bun.lock"]
   },
   "overrides": [
     {

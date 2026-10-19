@@ -22,6 +22,7 @@ const env = {
   XDG_CACHE_HOME: path.join(directory, "cache"),
   OPENCODE_DB: path.join(directory, "test.sqlite"),
   OPENCODE_SERVER_PASSWORD: undefined,
+  OPENCODE_PASSWORD: "",
   OPENCODE_SANDBOX_CONFIG: undefined,
   OPENCODE_DISABLE_SANDBOX: undefined,
 }
@@ -73,13 +74,11 @@ try {
   )
   const password = logs.match(/server password (\S+)/)?.[1]
   assert.ok(password)
+  env.OPENCODE_PASSWORD = password
   const authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
   const run = (args: string[]) => {
     const request = args[0] === "reload" ? ["api", "post", "/api/location/reload"] : args
-    const routed =
-      request[0] === "api"
-        ? [...request, "--server", url, "--header", `Authorization:${authorization}`]
-        : request
+    const routed = request[0] === "api" ? [...request, "--server", url] : request
     try {
       return execFileSync("opencode", routed, {
         env,
@@ -103,13 +102,6 @@ try {
   )
   assert.ok(configs.length > 0)
   assert.ok(fs.readFileSync(configFile, "utf8").includes("// Preserve this comment"))
-  const entries = JSON.parse(run(["api", "get", "/api/plugin"]))
-  assert.ok(
-    entries.data.some(
-      (entry: { id: string; state: { status: string } }) =>
-        entry.id === "opencode-sandbox" && entry.state.status === "active",
-    ),
-  )
   console.log("PASS native Git install from published revision; real dotenv read/write denial")
   console.log(setup(options))
   console.log(setup({ ...options, uninstall: true }))

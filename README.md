@@ -1,5 +1,4 @@
-[![CI](https://github.com/isanchez31/opencode-sandbox-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/isanchez31/opencode-sandbox-plugin/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/opencode-sandbox)](https://www.npmjs.com/package/opencode-sandbox)
+[![CI](https://github.com/guillermoap/opencode-sandbox-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/guillermoap/opencode-sandbox-plugin/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # opencode-sandbox
@@ -18,8 +17,75 @@ Every `bash` tool invocation is wrapped with OS-level filesystem and network res
 
 ### OpenCode V2 (this fork)
 
-This fork adds the V2 plugin entrypoint and keeps the original V1 server entrypoint.
-It targets OpenCode **2.0.29**. Build a local checkout and load its package directory:
+No manual clone, Bun installation, or build is needed. The fork ships its built
+entrypoint. OpenCode V2 and **Node 20.11+** are required; tested on OpenCode **2.0.29**.
+
+#### Native plugin installation
+
+Run from a **trusted terminal outside OpenCode's sandbox**:
+
+```sh
+opencode plugin add github:guillermoap/opencode-sandbox-plugin#v0.6.1-v2.1
+opencode reload
+opencode plugin list
+```
+
+This installs the shell sandbox without changing tool permissions. On macOS, the
+plugin protects `.env` and `.env.*` by default, including nested/external files
+and `.env.example`. For an immutable Git pin, use the full source revision from
+the release notes instead of the version tag.
+
+#### Optional setup: YOLO except dotenv files (macOS)
+
+The setup script installs an **exact Git revision**, adds direct-file dotenv
+denials, and checks real OS protection with dummy secrets. Download and inspect
+the versioned bootstrap before running it; do not pipe a remote script into `sh`.
+
+```sh
+curl --proto '=https' --tlsv1.2 -fL \
+  https://github.com/guillermoap/opencode-sandbox-plugin/releases/download/v0.6.1-v2.1/install.sh \
+  -o install.sh
+less install.sh
+sh install.sh --yolo-except-env
+```
+
+The bootstrap verifies the SHA-256 of its standalone setup payload before running
+it. Both assets belong to the same versioned release; the checksum is an integrity
+check, not an independent signature. No `sudo`, Bun, or manual JSON editing.
+
+- **Without `--yolo-except-env`:** install the sandbox and dotenv file denials;
+  do not add an allow-all rule or broaden filesystem/network permissions.
+- **With `--yolo-except-env`:** add an allow-all fallback, permit writes throughout
+  your home/temp directories, and permit local services. Existing explicit deny
+  and ask rules remain effective. The upstream external-network allowlist remains.
+- Existing providers, MCP servers, plugins, credential restrictions, comments,
+  and unrelated config are preserved. Files are backed up before installation.
+  Symlinked config files and simultaneous setup runs are refused.
+- A failed installation rolls back config when it has not been modified by
+  another process. Re-running the same setup is idempotent and retains the
+  original rollback point.
+
+Restore the configuration from before the latest setup:
+
+```sh
+sh install.sh --uninstall
+```
+
+Rollback refuses to overwrite subsequent edits; backups are under
+`${XDG_STATE_HOME:-~/.local/state}/opencode-sandbox-setup/`. Backups contain your
+original configuration and are stored privately (directory `0700`, files `0600`).
+Downloaded package caches are not deleted. Native-only installations can be
+removed with `opencode plugin remove <the-exact-package-specifier>`.
+
+**Limits:** this is not a whole-machine secret sandbox. MCP servers, non-shell
+tools, and inherited environment variables are outside the shell sandbox. The
+setup adds direct `read`/`edit` denials, not a universal content filter. Apps that
+load denied `.env` files will fail. Linux has different glob semantics; this
+installer intentionally supports macOS only.
+
+#### Developer checkout
+
+Build a local checkout when changing the plugin:
 
 ```bash
 git clone https://github.com/guillermoap/opencode-sandbox-plugin.git
@@ -65,6 +131,10 @@ For `.env` protection on **macOS**, merge these filesystem rules into
 }
 ```
 
+These explicit rules are optional in V2: its macOS guard always adds the dotenv
+denials, including when no sandbox config file exists. They remain useful for
+V1 or as a visible record of your policy.
+
 These native macOS glob rules include nested/external files and `.env.example`.
 Specifying `denyRead` replaces the default credential deny list; retain any
 credential paths you also want protected. Keep OpenCode's direct-file permission
@@ -83,6 +153,11 @@ concurrent commands, and exit-code propagation.
 `bun run test:opencode` exercises the same checks through a real OpenCode V2
 location and shell API, without a model call. It creates and cleans up a temporary
 project and its isolated per-project sandbox policy.
+
+Release maintainers: commit source and rebuilt `dist/`, then run
+`bun run release:build` from a clean checkout. Upload the generated `install.sh`,
+`setup.mjs`, and `SHA256SUMS` under the versioned GitHub release. The bootstrap
+pins the current commit and payload checksum. CI rejects drift in committed builds.
 
 ### OpenCode V1 (upstream)
 

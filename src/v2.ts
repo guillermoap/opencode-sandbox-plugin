@@ -32,6 +32,16 @@ export default Plugin.define({
         const config = SandboxRuntimeConfigSchema.parse(
           resolveConfig(ctx.location.directory, ctx.location.project.directory, user),
         )
+        // A native installation must protect dotenv files without requiring a
+        // second configuration file. Keep existing credential restrictions.
+        if (process.platform === "darwin") {
+          for (const pattern of ["/**/.env", "/**/.env.*"]) {
+            if (!config.filesystem.denyRead.includes(pattern))
+              config.filesystem.denyRead.push(pattern)
+            if (!config.filesystem.denyWrite.includes(pattern))
+              config.filesystem.denyWrite.push(pattern)
+          }
+        }
         // Protect the policy and implementation even when the location is HOME
         // or the plugin checkout itself is inside an allowed write directory.
         const require = createRequire(import.meta.url)

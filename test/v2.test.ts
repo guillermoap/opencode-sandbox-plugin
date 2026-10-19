@@ -55,6 +55,10 @@ describe("V2 sandbox", () => {
     expect(input.command).toContain("3<<'OPENCODE_SANDBOX_SETTINGS'")
     expect(input.command).toContain("/bin/zsh")
     const config = JSON.parse(input.command.split("\n")[1] ?? "{}")
+    if (process.platform === "darwin") {
+      expect(config.filesystem.denyRead).toContain("/**/.env")
+      expect(config.filesystem.denyWrite).toContain("/**/.env.*")
+    }
     expect(config.filesystem.denyWrite).toContain(
       new URL("..", import.meta.url).pathname.replace(/\/$/, ""),
     )

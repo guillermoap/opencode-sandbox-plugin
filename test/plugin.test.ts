@@ -42,7 +42,7 @@ describe("SandboxPlugin", () => {
     mockWrapWithSandbox.mockClear()
     mockCleanupAfterCommand.mockClear()
     delete process.env.OPENCODE_DISABLE_SANDBOX
-    delete process.env.OPENCODE_SANDBOX_CONFIG
+    process.env.OPENCODE_SANDBOX_CONFIG = "{}"
     delete process.env.OPENCODE_SERVER_PASSWORD
     delete process.env.OPENCODE_SERVER_USERNAME
   })

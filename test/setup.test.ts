@@ -16,6 +16,15 @@ test("native Git package ships built files without triggering npm preparation", 
   }
   expect(manifest.files).toContain("dist")
 })
+
+test("Node executes the setup CLI through a symlinked path", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-cli-symlink-"))
+  roots.push(home)
+  const link = path.join(home, "setup.mjs")
+  fs.symlinkSync(path.resolve("scripts/setup.mjs"), link)
+  const output = execFileSync("node", [link, "--help"], { encoding: "utf8" })
+  expect(output).toContain("Usage: sh install.sh")
+})
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true })
 })
@@ -246,7 +255,7 @@ test("download bootstrap refuses a changed payload before executing Node", () =>
   const installer = path.join(f.home, "install.sh")
   const source = fs
     .readFileSync("scripts/install.sh", "utf8")
-    .replaceAll("__OPENCODE_SANDBOX_TAG__", "v0.6.1-v2.1")
+    .replaceAll("__OPENCODE_SANDBOX_TAG__", "v0.6.1-v2.2")
     .replaceAll("__OPENCODE_SANDBOX_REVISION__", revision)
     .replaceAll("__OPENCODE_SANDBOX_SHA256__", "1".repeat(64))
   fs.writeFileSync(installer, source)

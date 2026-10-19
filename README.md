@@ -25,7 +25,7 @@ entrypoint. OpenCode V2 and **Node 20.11+** are required; tested on OpenCode **2
 Run from a **trusted terminal outside OpenCode's sandbox**:
 
 ```sh
-opencode plugin add github:guillermoap/opencode-sandbox-plugin#v0.6.1-v2.1
+opencode plugin add github:guillermoap/opencode-sandbox-plugin#v0.6.1-v2.2
 opencode reload
 opencode plugin list
 ```
@@ -43,7 +43,7 @@ the versioned bootstrap before running it; do not pipe a remote script into `sh`
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fL \
-  https://github.com/guillermoap/opencode-sandbox-plugin/releases/download/v0.6.1-v2.1/install.sh \
+  https://github.com/guillermoap/opencode-sandbox-plugin/releases/download/v0.6.1-v2.2/install.sh \
   -o install.sh
 less install.sh
 sh install.sh --yolo-except-env

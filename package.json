@@ -21,12 +21,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir dist --target node --format esm --packages external && bun x tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:plugin": "bun build ./src/index.ts --outdir dist --target node --format esm --packages external && bun x tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun run --watch src/index.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
-    "test:smoke": "bun run build && bun scripts/smoke-v2.ts",
-    "test:opencode": "bun run build && bun scripts/smoke-v2.ts --opencode",
+    "test:smoke": "bun run build:plugin && bun scripts/smoke-v2.ts",
+    "test:opencode": "bun run build:plugin && bun scripts/smoke-v2.ts --opencode",
     "release:build": "bun scripts/build-release.ts",
     "lint": "biome lint .",
     "format": "biome format .",
@@ -34,7 +34,7 @@
     "typecheck": "tsc --noEmit",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build:plugin"
   },
   "keywords": [
     "opencode",

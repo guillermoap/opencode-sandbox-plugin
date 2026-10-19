@@ -8,6 +8,14 @@ import { permissionConfig, sandboxConfig, setup, verifyProtection } from "../scr
 
 const roots: string[] = []
 const revision = "1234567890abcdef1234567890abcdef12345678"
+
+test("native Git package ships built files without triggering npm preparation", () => {
+  const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"))
+  for (const script of ["postinstall", "build", "preinstall", "install", "prepack", "prepare"]) {
+    expect(manifest.scripts[script]).toBeUndefined()
+  }
+  expect(manifest.files).toContain("dist")
+})
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true })
 })

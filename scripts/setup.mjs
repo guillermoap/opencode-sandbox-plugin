@@ -315,24 +315,28 @@ export function setup({
       save()
     }
     save()
+    let stage = "native plugin installation"
     try {
       try {
         run(["plugin", "add", `${REPOSITORY}#${revision}`])
       } finally {
         record()
       }
+      stage = "configuration update"
       // The native command may choose either existing config filename.
       const active = read(files[1]).bytes !== null ? files[1] : files[0]
       atomicWrite(active, permissionConfig(read(active).bytes, yolo, active), read(active).mode)
       record()
       atomicWrite(files[2], sandbox, snapshots[2].mode)
       record()
+      stage = "configuration reload"
       run(["reload"])
+      stage = "protection verification"
       verify(run)
       manifest.status = "complete"
       save()
       return `Installed pinned revision ${revision}; protection verified. Backup: ${backup}`
-    } catch {
+    } catch (error) {
       restore(manifest)
       manifest.status = "restored"
       save()
@@ -341,7 +345,10 @@ export function setup({
       } catch {
         /* Original failure remains the reason setup failed. */
       }
-      throw new Error(`Setup failed; previous configuration restored. Backup: ${backup}`)
+      throw new Error(
+        `Setup failed during ${stage}; previous configuration restored. Backup: ${backup}`,
+        { cause: error },
+      )
     }
   } finally {
     fs.closeSync(fd)

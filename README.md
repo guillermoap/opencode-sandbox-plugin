@@ -91,7 +91,7 @@ Build a local checkout when changing the plugin:
 git clone https://github.com/guillermoap/opencode-sandbox-plugin.git
 cd opencode-sandbox-plugin
 bun install --frozen-lockfile
-bun run build
+bun run build:plugin
 ```
 
 ```jsonc

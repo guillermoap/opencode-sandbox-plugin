@@ -53,22 +53,47 @@ try {
   let healthy = false
   while (!healthy && Date.now() < deadline && server.exitCode === null) {
     try {
-      healthy = (await fetch(`${url}/api/info`)).ok
+      const password = logs.match(/server password (\S+)/)?.[1]
+      if (password)
+        healthy = (
+          await fetch(`${url}/api/info`, {
+            headers: {
+              authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
+            },
+          })
+        ).ok
     } catch {
       /* Server is starting. */
     }
     if (!healthy) await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  assert.ok(healthy, `Private server failed to start: ${logs}`)
+  assert.ok(
+    healthy,
+    `Private server failed to start: ${logs.replace(/server password \S+/g, "server password [redacted]")}`,
+  )
+  const password = logs.match(/server password (\S+)/)?.[1]
+  assert.ok(password)
+  const authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
   const run = (args: string[]) => {
-    const routed = ["api", "reload"].includes(args[0]) ? [...args, "--server", url] : args
-    return execFileSync("opencode", routed, {
-      env,
-      cwd: directory,
-      encoding: "utf8",
-      timeout: 180000,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
+    const request = args[0] === "reload" ? ["api", "post", "/api/location/reload"] : args
+    const routed =
+      request[0] === "api"
+        ? [...request, "--server", url, "--header", `Authorization:${authorization}`]
+        : request
+    try {
+      return execFileSync("opencode", routed, {
+        env,
+        cwd: directory,
+        encoding: "utf8",
+        timeout: 180000,
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+    } catch (error) {
+      const stderr = (error as { stderr?: Buffer }).stderr?.toString() ?? ""
+      throw new Error(
+        `OpenCode ${args[0]} failed: ${stderr.replaceAll(authorization, "[redacted]").replaceAll(password, "[redacted]")}`,
+      )
+    }
   }
   const options = { revision, yolo: true, env, home: env.HOME, run }
   console.log(setup(options))

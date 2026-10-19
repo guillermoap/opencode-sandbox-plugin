@@ -24,6 +24,6 @@ jobs:
 
       - run: bun test
 
-      - run: bun run build
+      - run: bun run build:plugin
 
       - run: git diff --exit-code -- dist

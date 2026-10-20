@@ -25,7 +25,7 @@ entrypoint. OpenCode V2 and **Node 20.11+** are required; tested on OpenCode **2
 Run from a **trusted terminal outside OpenCode's sandbox**:
 
 ```sh
-opencode plugin add github:guillermoap/opencode-sandbox-plugin#v0.6.1-v2.2
+opencode plugin add github:guillermoap/opencode-sandbox-plugin#v0.6.1-v2.3
 opencode reload
 opencode plugin list
 ```
@@ -43,7 +43,7 @@ the versioned bootstrap before running it; do not pipe a remote script into `sh`
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fL \
-  https://github.com/guillermoap/opencode-sandbox-plugin/releases/download/v0.6.1-v2.2/install.sh \
+  https://github.com/guillermoap/opencode-sandbox-plugin/releases/download/v0.6.1-v2.3/install.sh \
   -o install.sh
 less install.sh
 sh install.sh --yolo-except-env
@@ -56,7 +56,8 @@ check, not an independent signature. No `sudo`, Bun, or manual JSON editing.
 - **Without `--yolo-except-env`:** install the sandbox and dotenv file denials;
   do not add an allow-all rule or broaden filesystem/network permissions.
 - **With `--yolo-except-env`:** add an allow-all fallback, permit writes throughout
-  your home/temp directories, and permit local services. Existing explicit deny
+  your home/temp directories, permit local services, and enable the existing
+  GitHub login through a masked token. Existing explicit deny
   and ask rules remain effective. The upstream external-network allowlist remains.
 - Existing providers, MCP servers, plugins, credential restrictions, comments,
   and unrelated config are preserved. Files are backed up before installation.
@@ -78,10 +79,51 @@ Downloaded package caches are not deleted. Native-only installations can be
 removed with `opencode plugin remove <the-exact-package-specifier>`.
 
 **Limits:** this is not a whole-machine secret sandbox. MCP servers, non-shell
-tools, and inherited environment variables are outside the shell sandbox. The
+tools, and secrets already in model context are outside the shell sandbox. The
 setup adds direct `read`/`edit` denials, not a universal content filter. Apps that
 load denied `.env` files will fail. Linux has different glob semantics; this
 installer intentionally supports macOS only.
+
+#### SSH, GitHub, and publication approvals
+
+V2 forwards an existing `SSH_AUTH_SOCK` and uses the loaded agent identities; it
+never loads a private-key file itself. Load your key with `ssh-add` in a trusted
+terminal before starting OpenCode if needed. The agent's socket and the public,
+regular-file `~/.ssh/known_hosts` are the only automatic SSH exceptions. Unknown
+host keys are rejected, not automatically trusted. Private SSH files stay denied.
+The managed Git SSH command ignores `~/.ssh/config` and uses an authenticated
+local CONNECT proxy so SSH follows the sandbox's network allowlist.
+Commits in existing repositories work. Upstream protections on `.git/config`
+and `.git/hooks` remain: clone/init and remote-configuration changes may fail.
+
+The YOLO setup also enables `githubCLI: true`. With an existing `gh auth login`
+for github.com, the host launcher obtains the login token without printing it.
+The runtime gives the sandbox a fake token; its local TLS proxy substitutes the
+real token only at `api.github.com` and `uploads.github.com`. The real token is
+not placed in generated commands, files, or ordinary shell output. `gh` uses an
+empty per-command config location; the real GitHub configuration remains denied.
+This supports normal `gh` operations, including release creation and uploads.
+An in-sandbox Unix-socket HTTP bridge lets macOS `gh` use this temporary CA
+without changing the system trust store or disabling TLS verification. It holds
+only the fake token and forwards only GitHub API/upload requests through SRT.
+Set `githubCLI: false` to disable this capability. Missing `gh` or login does not
+break unrelated commands. TLS interception uses an ephemeral local CA; its key
+is denied inside the sandbox. This does not install a system-wide CA.
+
+The plugin changes allowed **`gh pr create`** and release **create/upload/edit/
+delete/delete-asset** permission checks to `ask`, while preserving existing
+denials. Ordinary commits and read-only GitHub commands do not gain new prompts.
+Use OpenCode's default prompt mode, not `--auto` or `session.permissions:
+"autoaccept"`, which would automatically approve permission requests. These are
+CLI-command approval checks, not a universal GitHub API firewall: arbitrary
+scripts, raw API calls, and MCP tools require their own policies. GitHub access
+uses your account's privileges, not a read-only identity.
+
+Inherited environment is restricted to terminal/home/path/locale/XDG settings;
+unrelated API keys are not forwarded. Supply application secrets only in a
+separate trusted process. The setup refuses an existing CLI auto-accept setting
+rather than silently changing it. Explicit launch flags such as `--auto` can
+still bypass human confirmation and must not be used for this workflow.
 
 #### Developer checkout
 

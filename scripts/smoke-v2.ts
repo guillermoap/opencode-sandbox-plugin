@@ -80,6 +80,7 @@ try {
         return { dispose: async () => {} }
       },
     },
+    permission: { hook: async () => ({ dispose: async () => {} }) },
   } as Plugin.Context)
 
   const run = async (command: string) => {
@@ -111,6 +112,7 @@ try {
       const result = await exec(event.shell, ["-c", event.command], {
         cwd: fixture,
         timeout: 20000,
+        env: { ...process.env, ...event.env },
       })
       return { ...result, code: 0 }
     } catch (error) {

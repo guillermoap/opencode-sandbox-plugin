@@ -15,6 +15,8 @@ test("native Git package ships built files without triggering npm preparation", 
     expect(manifest.scripts[script]).toBeUndefined()
   }
   expect(manifest.files).toContain("dist")
+  expect(manifest.files).toContain("scripts/ssh-http-proxy.mjs")
+  expect(manifest.files).toContain("scripts/github-http-bridge.mjs")
 })
 
 test("Node executes the setup CLI through a symlinked path", () => {
@@ -62,8 +64,13 @@ describe("setup policy", () => {
     const output = permissionConfig(input, false).toString()
     expect(output).toContain("// comment")
     expect(parse(output).model).toBe("mine")
-    expect(parse(output).permissions).toHaveLength(4)
-    expect(parse(output).permissions.every((rule: any) => rule.effect === "deny")).toBe(true)
+    expect(parse(output).permissions).toHaveLength(9)
+    expect(parse(output).permissions.filter((rule: any) => rule.effect === "deny")).toHaveLength(8)
+    expect(parse(output).permissions.at(-1)).toEqual({
+      action: "read",
+      resource: "~/.ssh/known_hosts",
+      effect: "allow",
+    })
   })
 
   test("opt-in prepends allow-all, preserving existing explicit restrictions", () => {
@@ -73,7 +80,7 @@ describe("setup policy", () => {
     const rules = parse(permissionConfig(input, true).toString()).permissions
     expect(rules[0]).toEqual({ action: "*", resource: "*", effect: "allow" })
     expect(rules[1].effect).toBe("deny")
-    expect(rules.at(-1)).toEqual({ action: "edit", resource: "*.env.*", effect: "deny" })
+    expect(rules).toContainEqual({ action: "edit", resource: "*.env.*", effect: "deny" })
   })
 
   test("dotenv denials follow existing broad allows and remain idempotent", () => {
@@ -116,6 +123,17 @@ describe("setup policy", () => {
     const value = parse(sandboxConfig(null, true, "/home/test").toString())
     expect(value.filesystem.denyRead).toBeUndefined()
     expect(value.filesystem.denyWrite).toBeUndefined()
+  })
+
+  test("GitHub access is enabled by YOLO consent, never overwrites an opt-out", () => {
+    expect(parse(sandboxConfig(null, false).toString()).githubCLI).toBeUndefined()
+    expect(parse(sandboxConfig(null, true).toString()).githubCLI).toBe(true)
+    expect(
+      parse(sandboxConfig(Buffer.from('{"githubCLI":false}'), true).toString()).githubCLI,
+    ).toBe(false)
+    expect(() => sandboxConfig(Buffer.from('{"githubCLI":"true"}'), true)).toThrow(
+      "githubCLI must be a boolean",
+    )
   })
 })
 
@@ -218,6 +236,17 @@ describe("setup transaction", () => {
     expect(() => setup(f)).toThrow("Invalid JSON")
     expect(f.calls).toHaveLength(0)
     expect(fs.readFileSync(f.file, "utf8")).toBe("broken{")
+  })
+
+  test("autoaccept CLI settings are refused without changing configuration", () => {
+    const f = fixture()
+    const cli = path.join(path.dirname(f.file), "cli.json")
+    const original = '{"session":{"permissions":"autoaccept"}}'
+    fs.writeFileSync(cli, original)
+    expect(() => setup(f)).toThrow("Switch OpenCode session.permissions to prompt")
+    expect(f.calls).toHaveLength(0)
+    expect(fs.readFileSync(f.file, "utf8")).toBe(f.original)
+    expect(fs.readFileSync(cli, "utf8")).toBe(original)
   })
 
   test("symlinked config and concurrent setup are refused", () => {

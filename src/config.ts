@@ -10,6 +10,7 @@ import {
 export interface SandboxPluginConfig {
   disabled?: boolean
   mode?: "permissive" | "enforce"
+  githubCLI?: boolean
   filesystem?: {
     denyRead?: string[]
     allowRead?: string[]
@@ -135,6 +136,9 @@ function parseConfig(content: string, strict: boolean): SandboxPluginConfig {
     }
     if (value.mode !== undefined && !["enforce", "permissive"].includes(value.mode)) {
       throw new Error("Invalid sandbox mode")
+    }
+    if (value.githubCLI !== undefined && typeof value.githubCLI !== "boolean") {
+      throw new Error("githubCLI must be a boolean")
     }
     if (value.filesystem !== undefined) FilesystemConfigSchema.partial().parse(value.filesystem)
     if (value.network !== undefined) NetworkConfigSchema.partial().parse(value.network)

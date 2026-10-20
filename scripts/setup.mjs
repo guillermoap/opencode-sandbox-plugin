@@ -72,8 +72,11 @@ export function permissionConfig(bytes, yolo, file = "OpenCode config") {
         rule &&
         Object.keys(rule).length === 3 &&
         ["read", "edit"].includes(rule.action) &&
-        ["*.env", "*.env.*"].includes(rule.resource) &&
-        rule.effect === "deny"
+        ((["*.env", "*.env.*", "~/.ssh/*", "~/.config/gh/*"].includes(rule.resource) &&
+          rule.effect === "deny") ||
+          (rule.action === "read" &&
+            rule.resource === "~/.ssh/known_hosts" &&
+            rule.effect === "allow"))
       ),
   )
   if (
@@ -84,11 +87,12 @@ export function permissionConfig(bytes, yolo, file = "OpenCode config") {
     rules.unshift({ action: "*", resource: "*", effect: "allow" })
   }
   for (const action of ["read", "edit"]) {
-    for (const resource of ["*.env", "*.env.*"]) {
+    for (const resource of ["*.env", "*.env.*", "~/.ssh/*", "~/.config/gh/*"]) {
       const rule = { action, resource, effect: "deny" }
       rules.push(rule)
     }
   }
+  rules.push({ action: "read", resource: "~/.ssh/known_hosts", effect: "allow" })
   return Buffer.from(set(text, "permissions", rules))
 }
 
@@ -103,6 +107,8 @@ export function sandboxConfig(bytes, yolo, home = os.homedir(), file = "sandbox 
     }
   }
   const filesystem = { ...value.filesystem }
+  if (value.githubCLI !== undefined && typeof value.githubCLI !== "boolean")
+    throw new Error(`githubCLI must be a boolean: ${file}`)
   for (const key of ["denyRead", "denyWrite", "allowRead", "allowWrite"]) {
     if (
       filesystem[key] !== undefined &&
@@ -125,6 +131,7 @@ export function sandboxConfig(bytes, yolo, home = os.homedir(), file = "sandbox 
   text = set(text, "mode", "enforce")
   text = set(text, "disabled", false)
   text = set(text, "filesystem", filesystem)
+  if (yolo && value.githubCLI === undefined) text = set(text, "githubCLI", true)
   if (yolo) text = set(text, "network", { ...value.network, allowLocalBinding: true })
   return Buffer.from(text)
 }
@@ -274,6 +281,12 @@ export function setup({
       atomicWrite(stateFile, JSON.stringify(previous, null, 2))
       run(["reload"])
       return "Previous configuration restored. Downloaded package caches were left intact."
+    }
+    const cli = read(path.join(configDir, "cli.json"))
+    if (cli.bytes && document(cli.bytes, cli.file).value.session?.permissions === "autoaccept") {
+      throw new Error(
+        "Switch OpenCode session.permissions to prompt before installing publication approvals",
+      )
     }
     if (
       previous?.status === "complete" &&

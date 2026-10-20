@@ -106,6 +106,9 @@ function parseConfig(content, strict) {
     if (value.mode !== undefined && !["enforce", "permissive"].includes(value.mode)) {
       throw new Error("Invalid sandbox mode");
     }
+    if (value.githubCLI !== undefined && typeof value.githubCLI !== "boolean") {
+      throw new Error("githubCLI must be a boolean");
+    }
     if (value.filesystem !== undefined)
       FilesystemConfigSchema.partial().parse(value.filesystem);
     if (value.network !== undefined)
@@ -147,13 +150,38 @@ async function loadConfig(projectDir, strict = false) {
 
 // src/v2.ts
 import { execFileSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { accessSync, constants, lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
+import os2 from "node:os";
 import path2 from "node:path";
 import { SandboxRuntimeConfigSchema } from "@anthropic-ai/sandbox-runtime";
 import { Plugin } from "@opencode/plugin";
 function quote(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+var SAFE_ENV_NAMES = new Set([
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LC_MESSAGES",
+  "LOGNAME",
+  "PATH",
+  "SHELL",
+  "TERM",
+  "TMPDIR",
+  "USER",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_STATE_HOME"
+]);
+function needsPublicationApproval(command) {
+  const words = (command.match(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s]+/g) ?? []).map((word) => word.replace(/^(['"])(.*)\1$/, "$2"));
+  if (path2.basename(words[0] ?? "") !== "gh")
+    return false;
+  return words.some((word, index) => word === "pr" && words[index + 1] === "create" || word === "release" && ["create", "upload", "edit", "delete", "delete-asset"].includes(words[index + 1]));
 }
 var v2_default = Plugin.define({
   id: "opencode-sandbox",
@@ -162,6 +190,14 @@ var v2_default = Plugin.define({
       return;
     const configuration = loadConfig(ctx.location.directory, true).catch(() => null);
     let launcher;
+    await ctx.permission.hook("evaluate", async (event) => {
+      if ((await configuration)?.disabled)
+        return;
+      if (event.action === "shell" && event.effect !== "deny" && event.resources.some(needsPublicationApproval)) {
+        event.effect = "ask";
+        event.message = "Confirm before creating pull requests or modifying GitHub releases.";
+      }
+    });
     await ctx.shell.hook("create.before", async (event) => {
       const user = await configuration;
       if (!user)
@@ -181,6 +217,32 @@ var v2_default = Plugin.define({
               config.filesystem.denyWrite.push(pattern);
           }
         }
+        const sshDirectory = path2.join(os2.homedir(), ".ssh");
+        const githubDirectory = process.env.GH_CONFIG_DIR || path2.join(process.env.XDG_CONFIG_HOME || path2.join(os2.homedir(), ".config"), "gh");
+        config.filesystem.denyRead.push(sshDirectory, githubDirectory);
+        config.filesystem.denyWrite.push(sshDirectory, githubDirectory);
+        let knownHosts = "/dev/null";
+        const publicHosts = path2.join(sshDirectory, "known_hosts");
+        try {
+          if (lstatSync(publicHosts).isFile()) {
+            knownHosts = realpathSync(publicHosts);
+            config.filesystem.allowRead ??= [];
+            config.filesystem.allowRead.push(knownHosts);
+          }
+        } catch {}
+        let agent;
+        if (process.env.SSH_AUTH_SOCK) {
+          try {
+            const original = process.env.SSH_AUTH_SOCK;
+            const target = lstatSync(original).isSymbolicLink() ? path2.resolve(path2.dirname(original), readlinkSync(original)) : original;
+            const socket = path2.join(realpathSync(path2.dirname(target)), path2.basename(target));
+            if (statSync(socket).isSocket()) {
+              agent = socket;
+              config.network.allowUnixSockets ??= [];
+              config.network.allowUnixSockets.push(socket);
+            }
+          } catch {}
+        }
         const require2 = createRequire(import.meta.url);
         const packageRoot = path2.dirname(require2.resolve("../package.json"));
         config.filesystem.denyWrite.push(packageRoot, getConfigDir(), path2.join(path2.dirname(getConfigDir()), "opencode"));
@@ -192,12 +254,79 @@ var v2_default = Plugin.define({
           const cli = path2.join(path2.dirname(require2.resolve("@anthropic-ai/sandbox-runtime")), "cli.js");
           accessSync(node, constants.X_OK);
           accessSync(cli, constants.R_OK);
-          launcher = { node, cli };
+          const sshProxy = path2.join(packageRoot, "scripts", "ssh-http-proxy.mjs");
+          accessSync(sshProxy, constants.R_OK);
+          const githubBridge = path2.join(packageRoot, "scripts", "github-http-bridge.mjs");
+          accessSync(githubBridge, constants.R_OK);
+          let gh;
+          if (user.githubCLI) {
+            try {
+              gh = realpathSync(execFileSync("/usr/bin/which", ["gh"], { encoding: "utf8" }).trim());
+            } catch {}
+          }
+          launcher = { node, cli, sshProxy, githubBridge, gh };
         }
         config.filesystem.denyWrite.push(path2.dirname(launcher.node), path2.dirname(path2.dirname(launcher.cli)));
-        const command = `${quote(event.shell)} -c ${quote(event.command)}`;
+        let githubEnvironment = "";
+        let githubSocket;
+        if (user.githubCLI) {
+          let token;
+          if (launcher.gh) {
+            config.filesystem.denyWrite.push(path2.dirname(launcher.gh));
+            try {
+              token = execFileSync(launcher.gh, ["auth", "token", "--hostname", "github.com"], {
+                encoding: "utf8",
+                timeout: 1e4,
+                stdio: ["ignore", "pipe", "ignore"],
+                env: {
+                  ...process.env,
+                  GH_TOKEN: undefined,
+                  GITHUB_TOKEN: undefined,
+                  GH_HOST: "github.com"
+                }
+              }).trim() || undefined;
+            } catch {}
+          }
+          event.env.GH_TOKEN = token;
+          event.env.GITHUB_TOKEN = undefined;
+          event.env.GH_ENTERPRISE_TOKEN = undefined;
+          event.env.GITHUB_ENTERPRISE_TOKEN = undefined;
+          event.env.GH_HOST = "github.com";
+          event.env.GH_CONFIG_DIR = path2.join(os2.tmpdir(), `oc-gh-${randomUUID()}`);
+          githubEnvironment = "-u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN ";
+          if (token) {
+            config.credentials = {
+              envVars: [
+                {
+                  name: "GH_TOKEN",
+                  mode: "mask",
+                  injectHosts: ["api.github.com", "uploads.github.com"]
+                },
+                { name: "GITHUB_TOKEN", mode: "deny" }
+              ]
+            };
+            config.network.tlsTerminate = { excludeDomains: ["github.com", "ssh.github.com"] };
+            githubSocket = path2.join(realpathSync(os2.tmpdir()), `oc-gh-${randomUUID().slice(0, 8)}.sock`);
+            config.network.allowUnixSockets ??= [];
+            config.network.allowUnixSockets.push(githubSocket);
+            config.filesystem.allowWrite.push(event.env.GH_CONFIG_DIR, githubSocket);
+            const caKey = process.platform === "darwin" ? "/**/srt-ca-*/ca.key" : path2.join(os2.tmpdir(), "srt-ca-*", "ca.key");
+            config.filesystem.denyRead.push(caKey);
+            config.filesystem.denyWrite.push(caKey);
+          }
+        }
+        const githubNames = user.githubCLI ? new Set(["GH_TOKEN", "GH_CONFIG_DIR", "GH_HOST"]) : new Set;
+        for (const name of Object.keys({ ...process.env, ...event.env })) {
+          if (!SAFE_ENV_NAMES.has(name) && !githubNames.has(name))
+            event.env[name] = undefined;
+        }
+        const proxy = `${quote(launcher.node)} ${quote(launcher.sshProxy)} %h %p`;
+        const ssh = `ssh -F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o ControlMaster=no -o ControlPath=none -o UserKnownHostsFile=${quote(knownHosts)} -o IdentityAgent=${quote(agent ?? "none")} -o ProxyCommand=${quote(proxy)}`;
+        const script = `export GIT_SSH_COMMAND=${quote(ssh)}
+${event.command}`;
+        const command = githubSocket ? `${quote(launcher.node)} ${quote(launcher.githubBridge)} ${quote(githubSocket)} ${quote(event.shell)} ${quote(script)}` : `${quote(event.shell)} -c ${quote(script)}`;
         event.command = [
-          `exec /usr/bin/env -u NODE_OPTIONS -u NODE_PATH ${quote(launcher.node)} ${quote(launcher.cli)} --settings /dev/fd/3 -c ${quote(command)} 3<<'OPENCODE_SANDBOX_SETTINGS'`,
+          `exec /usr/bin/env -u NODE_OPTIONS -u NODE_PATH ${githubEnvironment}${agent ? `${quote(`SSH_AUTH_SOCK=${agent}`)} ` : "-u SSH_AUTH_SOCK "}${quote(launcher.node)} ${quote(launcher.cli)} --settings /dev/fd/3 -c ${quote(command)} 3<<'OPENCODE_SANDBOX_SETTINGS'`,
           JSON.stringify(config),
           "OPENCODE_SANDBOX_SETTINGS"
         ].join(`

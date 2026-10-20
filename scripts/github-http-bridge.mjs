@@ -54,13 +54,21 @@ export function createGitHubBridge(proxyText) {
       request.resume()
       return
     }
+    const headers = { ...request.headers }
+    // Release artifacts must remain byte-for-byte identical, never undergo
+    // credential substitution. Identity encoding tells SRT to pass the body
+    // unchanged (and retain Content-Length, which GitHub uploads require).
+    // Authorization-header substitution still happens over verified TLS.
+    if (host === "uploads.github.com" && headers["content-encoding"] === undefined) {
+      headers["content-encoding"] = "identity"
+    }
     const upstream = https.request(
       {
         hostname: host,
         port: 443,
         path: request.url,
         method: request.method,
-        headers: request.headers,
+        headers,
         agent,
       },
       (result) => {

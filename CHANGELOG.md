@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/guillermoap/opencode-sandbox-plugin/compare/v0.6.0...v0.7.0) (2026-10-20)
+
+
+### Added
+
+* enable sandboxed SSH and GitHub releases with publication approval ([b36a45a](https://github.com/guillermoap/opencode-sandbox-plugin/commit/b36a45aa06dde5ca7dbf311baea92986c5673316))
+* ship native Git installs and transactional macOS setup ([38b42c1](https://github.com/guillermoap/opencode-sandbox-plugin/commit/38b42c1a355ffc200c2f02bcebaa4377761ab586))
+* support OpenCode V2 shell sandboxing with fail-closed execution ([a7fab0a](https://github.com/guillermoap/opencode-sandbox-plugin/commit/a7fab0aa9fd45f21eece770313751958e92a1818))
+
+
+### Fixed
+
+* avoid Git dependency preparation for prebuilt installs ([96e55df](https://github.com/guillermoap/opencode-sandbox-plugin/commit/96e55df55fb848ea5c26434e250739e74c0a9e31))
+* bundle standalone installer through parser ESM entrypoint ([80f1d08](https://github.com/guillermoap/opencode-sandbox-plugin/commit/80f1d08bf1918fb97b61e4d33313e3f65dea2927))
+* execute installer from macOS symlinked temporary paths ([4fd562c](https://github.com/guillermoap/opencode-sandbox-plugin/commit/4fd562ca087997f86a8973a3684b357c771b1b57))
+* preserve release upload bytes and content length ([e29fb3a](https://github.com/guillermoap/opencode-sandbox-plugin/commit/e29fb3aec7f2d16783abb5eaf68fbe7d46f01436))
+
 ## [0.6.0](https://github.com/isanchez31/opencode-sandbox-plugin/compare/v0.5.3...v0.6.0) (2026-09-19)
 
 
